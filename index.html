@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Canvas Bouncy Orbs • Single‑File Demo</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --fg: #e2e8f0;
+      --muted: #94a3b8;
+      --card: #111827;
+      --accent: #22d3ee;
+      --accent-2: #a78bfa;
+      --ring: #38bdf8;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+      background: var(--bg);
+      color: var(--fg);
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .app {
+      width: min(920px, 100%);
+      display: grid;
+      gap: 16px;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    h1 {
+      font-size: clamp(20px, 4vw, 28px);
+      margin: 0;
+      letter-spacing: 0.2px;
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    button, select {
+      background: var(--card);
+      color: var(--fg);
+      border: 1px solid #1f2937;
+      border-radius: 14px;
+      padding: 10px 14px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: transform .05s ease, box-shadow .2s ease, border-color .2s ease;
+      outline: none;
+    }
+    button:hover, select:hover { border-color: var(--ring); }
+    button:active { transform: translateY(1px) scale(0.99); }
+    .panel {
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0));
+      border: 1px solid #1f2937;
+      border-radius: 18px;
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: space-between;
+    }
+    .stat {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    canvas {
+      width: 100%;
+      height: 480px;
+      background: radial-gradient(1200px 600px at 50% -100px, rgba(56,189,248,0.12), transparent),
+                  radial-gradient(900px 400px at 10% 110%, rgba(34,211,238,0.08), transparent),
+                  radial-gradient(900px 400px at 90% 110%, rgba(167,139,250,0.10), transparent),
+                  #0b1020;
+      border: 1px solid #1f2937;
+      border-radius: 18px;
+      display: block;
+    }
+    footer {
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .link {
+      color: var(--accent);
+      text-decoration: none;
+      border-bottom: 1px dashed currentColor;
+    }
+    .badges {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .chip {
+      border: 1px solid #1f2937;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+      color: var(--muted);
+      background: rgba(255,255,255,0.02);
+    }
+    .theme-light {
+      --bg: #f8fafc;
+      --fg: #0f172a;
+      --muted: #475569;
+      --card: #ffffff;
+      --accent: #0ea5e9;
+      --accent-2: #7c3aed;
+      --ring: #0891b2;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="row">
+      <h1>Canvas Bouncy Orbs</h1>
+      <div class="controls">
+        <button id="toggle">Pause</button>
+        <button id="spawn">+10 Orbs</button>
+        <select id="theme">
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+        </select>
+        <button id="reset">Reset</button>
+      </div>
+    </header>
+
+    <div class="panel">
+      <div class="row">
+        <div class="badges">
+          <span class="chip">Single file: HTML + CSS + JS</span>
+          <span class="chip">LocalStorage theme</span>
+          <span class="chip">Canvas physics</span>
+          <span class="chip">Accessible controls</span>
+        </div>
+        <div class="stat"><span id="count">0</span> orbs • <span id="fps">0</span> fps</div>
+      </div>
+      <canvas id="stage" width="900" height="480" aria-label="Bouncy circles animation"></canvas>
+    </div>
+
+    <footer>
+      Built for a GitHub Pages demo. Tip: press <kbd>space</kbd> to pause, <kbd>n</kbd> to spawn. <a class="link" href="#" id="share">Share</a>
+    </footer>
+  </div>
+
+  <script>
+    // --- Theme handling with localStorage
+    const themeSelect = document.getElementById('theme');
+    const savedTheme = localStorage.getItem('demo-theme') || 'dark';
+    if (savedTheme === 'light') document.body.classList.add('theme-light');
+    themeSelect.value = savedTheme;
+    themeSelect.addEventListener('change', () => {
+      const mode = themeSelect.value;
+      document.body.classList.toggle('theme-light', mode === 'light');
+      localStorage.setItem('demo-theme', mode);
+    });
+
+    // --- Canvas setup
+    const cvs = document.getElementById('stage');
+    const ctx = cvs.getContext('2d', { alpha: false });
+    const DPR = Math.min(window.devicePixelRatio || 1, 2);
+    // Handle HiDPI
+    function resizeCanvas() {
+      const rect = cvs.getBoundingClientRect();
+      cvs.width = Math.floor(rect.width * DPR);
+      cvs.height = Math.floor(rect.height * DPR);
+    }
+    resizeCanvas();
+    addEventListener('resize', resizeCanvas);
+
+    // --- Orb physics
+    const orbs = [];
+    const TAU = Math.PI * 2;
+    const rand = (a, b) => a + Math.random() * (b - a);
+    const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+    const COLORS = ['#22d3ee', '#a78bfa', '#38bdf8', '#34d399', '#f472b6', '#fbbf24'];
+
+    function spawn(n = 10) {
+      for (let i = 0; i < n; i++) {
+        const r = rand(8, 22) * DPR;
+        orbs.push({
+          x: rand(r, cvs.width - r),
+          y: rand(r, cvs.height - r),
+          vx: rand(-2, 2) * DPR,
+          vy: rand(-2, 2) * DPR,
+          r,
+          color: pick(COLORS),
+        });
+      }
+      updateHud();
+    }
+
+    function step(dt) {
+      const g = 0.15 * DPR;
+      const bounce = 0.92;
+      for (const o of orbs) {
+        o.vy += g;
+        o.x += o.vx;
+        o.y += o.vy;
+
+        if (o.x < o.r) { o.x = o.r; o.vx *= -bounce; }
+        if (o.x > cvs.width - o.r) { o.x = cvs.width - o.r; o.vx *= -bounce; }
+        if (o.y < o.r) { o.y = o.r; o.vy *= -bounce; }
+        if (o.y > cvs.height - o.r) { o.y = cvs.height - o.r; o.vy *= -bounce; }
+
+        // mild friction
+        o.vx *= 0.999;
+        o.vy *= 0.999;
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, cvs.width, cvs.height);
+      for (const o of orbs) {
+        const g = ctx.createRadialGradient(o.x - o.r*0.3, o.y - o.r*0.3, o.r*0.2, o.x, o.y, o.r);
+        g.addColorStop(0, o.color);
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(o.x, o.y, o.r, 0, TAU);
+        ctx.fill();
+      }
+    }
+
+    // --- Animation loop with FPS estimate
+    let playing = true;
+    let last = performance.now();
+    let fpsAcc = 0, fpsCount = 0, fpsDisplay = 0;
+    function loop(now) {
+      const dt = Math.min(32, now - last);
+      last = now;
+      if (playing) {
+        step(dt);
+        draw();
+      }
+      // fps (EMA)
+      const inst = 1000 / Math.max(1, dt);
+      fpsAcc += inst; fpsCount++;
+      if (now % 500 < 16) { // update ~twice/sec
+        fpsDisplay = Math.round(fpsAcc / Math.max(1, fpsCount));
+        fpsAcc = 0; fpsCount = 0;
+        document.getElementById('fps').textContent = String(fpsDisplay);
+      }
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+
+    // --- Controls
+    const btnToggle = document.getElementById('toggle');
+    const btnSpawn = document.getElementById('spawn');
+    const btnReset = document.getElementById('reset');
+    const countEl = document.getElementById('count');
+
+    function updateHud() { countEl.textContent = String(orbs.length); }
+
+    btnToggle.addEventListener('click', () => {
+      playing = !playing;
+      btnToggle.textContent = playing ? 'Pause' : 'Play';
+      if (playing) last = performance.now();
+    });
+    btnSpawn.addEventListener('click', () => spawn(10));
+    btnReset.addEventListener('click', () => { orbs.length = 0; updateHud(); });
+
+    // Keyboard shortcuts
+    addEventListener('keydown', (e) => {
+      if (e.code === 'Space') { e.preventDefault(); btnToggle.click(); }
+      if (e.key.toLowerCase() === 'n') { btnSpawn.click(); }
+      if (e.key.toLowerCase() === 'r') { btnReset.click(); }
+    });
+
+    // Share link (Web Share API)
+    document.getElementById('share').addEventListener('click', async (e) => {
+      e.preventDefault();
+      const url = location.href;
+      try {
+        if (navigator.share) {
+          await navigator.share({ title: document.title, url });
+        } else {
+          await navigator.clipboard.writeText(url);
+          alert('Link copied to clipboard!');
+        }
+      } catch (_) {}
+    });
+
+    // initial population
+    spawn(20);
+  </script>
+</body>
+</html>
